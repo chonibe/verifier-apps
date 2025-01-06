@@ -4,31 +4,41 @@ import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { Loader2, Check, Tag, ArrowLeft } from 'lucide-react';
 
+// We know exactly where the dashboard is located
+const DASHBOARD_URL = 'https://www.thestreetlamp.com/apps/verisart';
+
+// This function parses the specific HTML structure we saw in the Verisart dashboard
 const parseArtworks = (html) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   const artworks = [];
   
-  doc.querySelectorAll('article[data-test="previewCard"]').forEach(article => {
+  // Using the exact class names we saw in the HTML
+  const artworkCards = doc.querySelectorAll('article[data-test="previewCard"]');
+  
+  artworkCards.forEach(article => {
+    // Using the exact class structure from the provided HTML
     const title = article.querySelector('.ver-text-lg .ver-truncate')?.textContent;
     const artist = article.querySelector('.ver-text-base.ver-font-bold')?.textContent;
-    const year = article.querySelector('.ver-text-lg .ver-inline')?.textContent.replace(',', '').trim();
-    const imageUrl = article.querySelector('img')?.src;
+    const year = article.querySelector('.ver-text-lg .ver-inline')?.textContent?.replace(',', '').trim();
+    const imageUrl = article.querySelector('.ver-relative.ver-min-h-64 img')?.src;
     
-    artworks.push({
-      id: `${title}-${year}`.replace(/\s+/g, '-').toLowerCase(),
-      title,
-      artist,
-      year,
-      imageUrl,
-      status: 'Unverified'
-    });
+    if (title && artist) {
+      artworks.push({
+        id: `${title}-${year}`.replace(/\s+/g, '-').toLowerCase(),
+        title,
+        artist,
+        year,
+        imageUrl,
+        status: 'Unverified'
+      });
+    }
   });
   
   return artworks;
 };
+
 const VerisartDashboard = () => {
-  // State management for our component
   const [artworks, setArtworks] = useState([]);
   const [selectedArtwork, setSelectedArtwork] = useState(null);
   const [verisartUrl, setVerisartUrl] = useState(null);
@@ -37,11 +47,11 @@ const VerisartDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState('dashboard');
 
-  // Effect to fetch dashboard data when component mounts
+  // Fetch the dashboard directly from thestreetlamp.com
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        const response = await fetch('/apps/verisart');
+        const response = await fetch(DASHBOARD_URL);
         const html = await response.text();
         const parsedArtworks = parseArtworks(html);
         setArtworks(parsedArtworks);
@@ -52,6 +62,40 @@ const VerisartDashboard = () => {
       }
     };
 
+    fetchDashboard();
+  }, []);
+
+  const handleArtworkSelect = async (artwork) => {
+    setSelectedArtwork(artwork);
+    setView('authentication');
+    setIsLoading(true);
+
+    try {
+      // We'll fetch the artwork's specific page to get its Verisart URL
+      const response = await fetch(`${DASHBOARD_URL}/works/${artwork.id}`);
+      const html = await response.text();
+      
+      // Looking for the exact div structure we saw in the HTML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const verisartLink = doc.querySelector('div.ver-mt-12 a[href^="https://verisart.com/works/"]');
+      
+      if (verisartLink) {
+        setVerisartUrl(verisartLink.getAttribute('href'));
+      } else {
+        throw new Error('Verisart URL not found');
+      }
+    } catch (error) {
+      setError('Error fetching artwork details: ' + error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ... rest of the component code remains the same ...
+};
+
+export default VerisartDashboard;
     fetchDashboard();
   }, []);
 
