@@ -1,16 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['res.cloudinary.com'],
+    domains: ['res.cloudinary.com'], // For the artwork images from Verisart
   },
-  async rewrites() {
-    return [
-      {
-        source: '/apps/verisart/:path*',
-        destination: 'https://www.thestreetlamp.com/apps/verisart/:path*',
-      },
-    ];
-  },
+  // We don't need the rewrites anymore since we're accessing the URL directly
 };
 
 module.exports = nextConfig;
