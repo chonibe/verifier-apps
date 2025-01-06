@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC Certificate Verifier</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div id="app"></div>
+    <script>
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [view, setView] = useState('home');
+            const [status, setStatus] = useState('idle');
+            const [error, setError] = useState(null);
+            const [result, setResult] = useState(null);
+            const [nfcSupported, setNfcSupported] = useState(null);
+
+            useEffect(() => {
+                checkNFCSupport();
+            }, []);
+
+            const checkNFCSupport = () => {
+                if ('NDEFReader' in window) {
+                    setNfcSupported(true);
+                } else {
+                    setNfcSupported(false);
+                    setError('NFC is not supported in this browser');
+                }
+            };
+
+            const startNFCScan = async (mode) => {
+                if (!nfcSupported) return;
+                
+                try {
+                    setStatus('scanning');
+                    setError(null);
+                    
+                    const ndef = new NDEFReader();
+                    await ndef.scan();
+                    
+                    ndef.addEventListener("reading", async ({ serialNumber }) => {
+                        try {
+                            setStatus('processing');
+                            
+                            // Replace with your actual API endpoint
+                            const endpoint = mode === 'verify' ? 
+                                `/api/verify/${serialNumber}` : 
+                                '/api/link';
+                            
+                            const response = await fetch(endpoint, {
+                                method: mode === 'verify' ? 'GET' : 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: mode === 'verify' ? null : JSON.stringify({
+                                    nfcId: serialNumber
+                                })
+                            });
+
+                            const data = await response.json();
+                            
+                            if (!response.ok) throw new Error(data.message);
+                            
+                            setResult(data);
+                            setStatus('success');
+                            
+                        } catch (err) {
+                            setError(err.message);
+                            setStatus('error');
+                        }
+                    });
+
+                } catch (err) {
+                    setError(err.message);
+                    setStatus('error');
+                }
+            };
+
+            const renderHome = () => (
+                <div className="space-y-6">
+                    <h1 className="text-3xl font-bold text-center text-gray-800">
+                        NFC Certificate Verifier
+                    </h1>
+                    <p className="text-center text-gray-600">
+                        Verify the authenticity of your artwork using NFC
+                    </p>
+                    <div className="space-y-4">
+                        <button
+                            onClick={() => {
+                                setView('scan');
+                                startNFCScan('link');
+                            }}
+                            className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        >
+                            Link New Certificate
+                        </button>
+                        <button
+                            onClick={() => {
+                                setView('verify');
+                                startNFCScan('verify');
+                            }}
+                            className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                        >
+                            Verify Certificate
+                        </button>
+                    </div>
+                </div>
+            );
+
+            const renderScanning = () => (
+                <div className="text-center space-y-4">
+                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="text-xl font-semibold">
+                        {status === 'scanning' ? 'Scanning for NFC tag...' : 'Processing...'}
+                    </p>
+                    <p className="text-gray-600">
+                        Hold your device near the NFC tag
+                    </p>
+                </div>
+            );
+
+            const renderResult = () => (
+                <div className="space-y-6">
+                    {status === 'success' ? (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+                            <h2 className="text-xl font-semibold text-green-800">
+                                {view === 'verify' ? 'Certificate Verified!' : 'Certificate Linked!'}
+                            </h2>
+                            <div className="space-y-1 text-green-700">
+                                <p>Certificate ID: {result.certificateId}</p>
+                                <p>Issue Date: {new Date(result.issueDate).toLocaleDateString()}</p>
+                                <p>Product: {result.productTitle}</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                            <h2 className="text-xl font-semibold text-red-800">Error</h2>
+                            <p className="text-red-700">{error}</p>
+                        </div>
+                    )}
+                    <button
+                        onClick={() => {
+                            setView('home');
+                            setStatus('idle');
+                            setError(null);
+                            setResult(null);
+                        }}
+                        className="w-full py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+                    >
+                        Back to Home
+                    </button>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen p-6">
+                    <div className="max-w-md mx-auto bg-white rounded-xl shadow-lg p-6">
+                        {!nfcSupported && error ? (
+                            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                <p className="text-red-700">{error}</p>
+                            </div>
+                        ) : status === 'idle' ? (
+                            renderHome()
+                        ) : ['scanning', 'processing'].includes(status) ? (
+                            renderScanning()
+                        ) : (
+                            renderResult()
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(
+            React.createElement(App),
+            document.getElementById('app')
+        );
+    </script>
+</body>
+</html>
